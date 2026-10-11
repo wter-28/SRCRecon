@@ -92,7 +92,9 @@ QString fmtSize(qint64 n)
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent), m_engine(new ReconEngine(this))
 {
-    setWindowTitle(QStringLiteral("SRC 信息收集工具  v1.0"));
+    // 标题随应用版本动态生成，避免与 applicationVersion 不一致
+    setWindowTitle(QStringLiteral("SRC 信息收集工具  v%1")
+                       .arg(QApplication::applicationVersion()));
     resize(1360, 820);
 
     buildMenu();

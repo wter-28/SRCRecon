@@ -19,7 +19,7 @@ namespace src {
 namespace {
 const char *kUserAgent =
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/122.0 Safari/537.36 SRCRecon/1.0";
+    "(KHTML, like Gecko) Chrome/122.0 Safari/537.36 SRCRecon/1.2";
 } // namespace
 
 QString HttpResponse::contentType() const { return headers.value(QStringLiteral("content-type")); }
