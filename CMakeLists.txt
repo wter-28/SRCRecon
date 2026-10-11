@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.19)
 
-project(SRCRecon VERSION 1.0.0 LANGUAGES CXX)
+project(SRCRecon VERSION 1.1.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -26,6 +26,11 @@ set(SRC_RECON_SOURCES
     src/core/Settings.cpp
     src/core/DemoData.h
     src/core/DemoData.cpp
+    src/core/ReconState.h
+    src/core/CdnDetect.h
+    src/core/CdnDetect.cpp
+    src/core/JsExtract.h
+    src/core/JsExtract.cpp
     src/core/ReconEngine.h
     src/core/ReconEngine.cpp
 
@@ -34,6 +39,8 @@ set(SRC_RECON_SOURCES
     src/modules/SubdomainModule.cpp
     src/modules/AssetInfoModule.h
     src/modules/AssetInfoModule.cpp
+    src/modules/CdnModule.h
+    src/modules/CdnModule.cpp
     src/modules/PortScanModule.h
     src/modules/PortScanModule.cpp
     src/modules/WebFingerModule.h

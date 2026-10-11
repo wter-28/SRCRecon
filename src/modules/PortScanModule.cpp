@@ -28,6 +28,19 @@ bool isHttpPort(int port)
     return set.contains(port);
 }
 
+/// 是否为 TLS / HTTPS 端口
+bool isTlsPort(int port)
+{
+    static const QSet<int> set = {443, 4443, 8443, 9443};
+    return set.contains(port);
+}
+
+/// 是否为可继续访问的 Web 端口（用于串联指纹/目录/爬虫）
+bool isWebPort(int port)
+{
+    return isHttpPort(port) || isTlsPort(port);
+}
+
 /// 依据 Banner 内容修正服务识别结果
 QString guessService(int port, const QString &banner)
 {
@@ -116,58 +129,165 @@ void PortScanModule::run(ModuleContext &ctx)
     }
 
     const QVector<int> ports = parsePortSpec(o.portSpec);
-    if (ports.isEmpty()) {
+    if (ports.isEmpty())
+    {
         ctx.error(QStringLiteral("端口范围解析为空：%1").arg(o.portSpec));
         return;
     }
 
+    // 按 IP 聚合扫描目标：同一 IP 只扫一次，避免对共享主机的重复扫描
+    struct Target
+    {
+        QString     ip;
+        QStringList vhosts;
+    };
+    QVector<Target> targets;
+    QSet<QString>   seenIps;
+    QSet<QString>   cdnSkipped;
+
+    if (ctx.state)
+    {
+        for (const QString &ip : ctx.state->allIps())
+        {
+            if (ip.isEmpty() || seenIps.contains(ip))
+                continue;
+            seenIps.insert(ip);
+
+            if (ctx.state->isCdnIp(ip))
+            {
+                cdnSkipped.insert(ip);
+                continue;  // CDN 边缘 IP 跳过端口扫描，避免无意义请求与风控
+            }
+
+            Target t;
+            t.ip     = ip;
+            t.vhosts = ctx.state->hostsOfIp(ip);
+            targets << t;
+        }
+    }
+
+    // 兜底：共享状态不可用时仅扫描根目标
+    if (targets.isEmpty() && !o.host.isEmpty())
+    {
+        Target t;
+        t.ip     = o.isIp ? o.host : NetUtil::resolveFirst(o.host);
+        t.vhosts = {o.host};
+        if (!t.ip.isEmpty())
+            targets << t;
+    }
+
+    if (!cdnSkipped.isEmpty())
+        ctx.warn(QStringLiteral("跳过 %1 个 CDN 边缘 IP 的端口扫描（详见 CDN 标签页）")
+                     .arg(cdnSkipped.size()));
+
+    if (targets.isEmpty())
+    {
+        ctx.warn(QStringLiteral("无可用扫描目标，跳过端口扫描"));
+        return;
+    }
+
+    const int cap = qMax(1, o.maxScanHosts);
+    if (targets.size() > cap)
+    {
+        ctx.warn(QStringLiteral("扫描目标 %1 个，超出上限 %2，仅扫描前 %2 个")
+                     .arg(targets.size()).arg(cap));
+        targets = targets.mid(0, cap);
+    }
+
     const int connectTimeout = qBound(300, o.timeoutMs, 3000);
-    ctx.info(QStringLiteral("目标 %1，待扫描端口 %2 个，连接超时 %3 ms")
-                 .arg(o.host)
+    const int total = targets.size() * ports.size();
+    ctx.info(QStringLiteral("待扫描独立 IP %1 个，端口 %2 个，共 %3 次探测，连接超时 %4 ms")
+                 .arg(targets.size())
                  .arg(ports.size())
+                 .arg(total)
                  .arg(connectTimeout));
+
+    auto pickHost = [](const QStringList &vhosts, const QString &ip) -> QString {
+        for (const QString &h : vhosts)
+        {
+            if (!h.isEmpty() && h != ip)
+                return h;
+        }
+        return ip;
+    };
+    auto webUrl = [](const QString &scheme, const QString &host, int port) -> QString {
+        if ((scheme == QLatin1String("http") && port == 80)
+            || (scheme == QLatin1String("https") && port == 443))
+            return scheme + QStringLiteral("://") + host;
+        return scheme + QStringLiteral("://") + host + QLatin1Char(':') + QString::number(port);
+    };
 
     std::atomic<int> done{0};
     QMutex mtx;
     PortResultList open;
 
-    const int total = ports.size();
     QFutureSynchronizer<void> sync;
-    for (int port : ports) {
-        sync.addFuture(QtConcurrent::run(ctx.pool, [&, port]() {
-            if (ctx.isCancelled())
-                return;
+    for (const Target &t : targets)
+    {
+        for (int port : ports)
+        {
+            sync.addFuture(QtConcurrent::run(ctx.pool, [&, t, port]() {
+                if (ctx.isCancelled())
+                    return;
 
-            QString banner;
-            const QByteArray probe = isHttpPort(port)
-                                         ? QByteArray("HEAD / HTTP/1.0\r\nHost: ")
-                                               + o.host.toUtf8() + QByteArray("\r\n\r\n")
-                                         : QByteArray();
+                const QString hostName = pickHost(t.vhosts, t.ip);
+                QString banner;
+                const QByteArray probe = isHttpPort(port)
+                                             ? QByteArray("HEAD / HTTP/1.0\r\nHost: ")
+                                                   + hostName.toUtf8() + QByteArray("\r\n\r\n")
+                                             : QByteArray();
 
-            if (NetUtil::tcpConnect(o.host, port, connectTimeout, &banner, probe)) {
-                PortResult r;
-                r.host = o.host;
-                r.port = port;
-                r.service = guessService(port, banner);
-                r.banner = banner;
-                QMutexLocker locker(&mtx);
-                open.append(r);
-            }
+                if (NetUtil::tcpConnect(t.ip, port, connectTimeout, &banner, probe))
+                {
+                    PortResult r;
+                    r.host    = hostName;
+                    r.port    = port;
+                    r.service = guessService(port, banner);
+                    r.banner  = banner;
 
-            const int d = ++done;
-            if (d % 20 == 0 || d == total)
-                ctx.progress(d, total);
-        }));
+                    QMutexLocker locker(&mtx);
+                    open.append(r);
+
+                    if (ctx.state)
+                    {
+                        ctx.state->addPort(t.ip, port);
+
+                        // 串联：把探测到的 Web 服务登记为后续指纹/目录/爬虫的目标
+                        if (isWebPort(port))
+                        {
+                            const QString scheme = isTlsPort(port) ? QStringLiteral("https")
+                                                                   : QStringLiteral("http");
+                            int added = 0;
+                            for (const QString &vh : t.vhosts)
+                            {
+                                if (added >= 3)
+                                    break;
+                                ctx.state->addWebTarget(webUrl(scheme, vh, port));
+                                ++added;
+                            }
+                        }
+                    }
+                }
+
+                const int d = ++done;
+                if (d % 40 == 0 || d == total)
+                    ctx.progress(d, total);
+            }));
+        }
     }
     sync.waitForFinished();
 
-    if (ctx.isCancelled()) {
+    if (ctx.isCancelled())
+    {
         ctx.warn(QStringLiteral("端口扫描已被取消"));
         return;
     }
 
-    std::sort(open.begin(), open.end(),
-              [](const PortResult &a, const PortResult &b) { return a.port < b.port; });
+    std::sort(open.begin(), open.end(), [](const PortResult &a, const PortResult &b) {
+        if (a.host != b.host)
+            return a.host < b.host;
+        return a.port < b.port;
+    });
 
     ctx.addPorts(open);
     ctx.ok(QStringLiteral("端口扫描完成，开放端口 %1 个").arg(open.size()));

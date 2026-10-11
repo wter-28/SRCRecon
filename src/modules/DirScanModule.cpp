@@ -78,63 +78,84 @@ void DirScanModule::run(ModuleContext &ctx)
         return;
     }
 
-    QString base = o.baseUrl;
-    if (base.isEmpty() && !o.host.isEmpty())
-        base = QStringLiteral("http://") + o.host;
-    if (base.isEmpty()) {
+    // 串联：对每个存活的 Web 服务分别做目录 / 敏感路径探测
+    QStringList targets;
+    if (ctx.state)
+        targets = ctx.state->aliveWeb();
+    QString fallback = o.baseUrl;
+    if (fallback.isEmpty() && !o.host.isEmpty())
+        fallback = QStringLiteral("http://") + o.host;
+    if (!fallback.isEmpty() && !targets.contains(fallback))
+        targets.prepend(fallback);
+    targets.removeDuplicates();
+
+    const int cap = qMax(1, o.maxWebTargets);
+    if (targets.size() > cap)
+    {
+        ctx.warn(QStringLiteral("目录探测目标 %1 个，超出上限 %2，仅探测前 %2 个")
+                     .arg(targets.size()).arg(cap));
+        targets = targets.mid(0, cap);
+    }
+    if (targets.isEmpty())
+    {
         ctx.error(QStringLiteral("目标为空，跳过目录探测"));
         return;
     }
 
     const QStringList dict = words::loadWordlist(o.dirWordlist, words::directories());
-    ctx.info(QStringLiteral("目录字典条目：%1，目标：%2").arg(dict.size()).arg(base));
-
-    // 通配符检测：随机路径若返回 200，说明站点对任意路径都返回有效页面
-    const QString rndPath = QStringLiteral("src-recon-%1.html")
-                                .arg(QRandomGenerator::global()->generate(), 8, 16, QLatin1Char('0'));
-    bool wildcard = false;
-    {
-        const HttpResponse probe = NetUtil::httpRequest(joinUrl(base, rndPath), o.timeoutMs);
-        if (probe.statusCode == 200) {
-            wildcard = true;
-            ctx.warn(QStringLiteral("检测到通配响应（随机路径返回 200），结果可能存在误报"));
-        }
-    }
+    ctx.info(QStringLiteral("目录字典条目：%1，探测目标 %2 个").arg(dict.size()).arg(targets.size()));
 
     std::atomic<int> done{0};
     QMutex mtx;
     DirRecordList hits;
 
-    const int total = dict.size();
+    const int total = targets.size() * dict.size();
     QFutureSynchronizer<void> sync;
-    for (const QString &path : dict) {
-        sync.addFuture(QtConcurrent::run(ctx.pool, [&, path]() {
-            if (ctx.isCancelled())
-                return;
-
-            const QString url = joinUrl(base, path);
-            const HttpResponse res = NetUtil::httpRequest(url, o.timeoutMs);
-
-            const bool interesting = res.statusCode > 0 && res.statusCode != 404
-                                     && res.statusCode != 400;
-            if (interesting) {
-                DirRecord r;
-                r.url          = url;
-                r.statusCode   = res.statusCode;
-                r.length       = res.contentLength();
-                r.contentType  = res.contentType().section(QLatin1Char(';'), 0, 0);
-                r.note         = riskNote(path, res.statusCode);
-                if (wildcard && res.statusCode == 200)
-                    r.note += QStringLiteral("（疑似通配）");
-
-                QMutexLocker locker(&mtx);
-                hits.append(r);
+    for (const QString &base : targets)
+    {
+        // 通配符检测：随机路径若返回 200，说明站点对任意路径都返回有效页面
+        const QString rndPath = QStringLiteral("src-recon-%1.html")
+                                    .arg(QRandomGenerator::global()->generate(), 8, 16, QLatin1Char('0'));
+        bool wildcard = false;
+        {
+            const HttpResponse probe = NetUtil::httpRequest(joinUrl(base, rndPath), o.timeoutMs);
+            if (probe.statusCode == 200)
+            {
+                wildcard = true;
+                ctx.warn(QStringLiteral("%1 检测到通配响应，结果可能存在误报").arg(base));
             }
+        }
 
-            const int d = ++done;
-            if (d % 20 == 0 || d == total)
-                ctx.progress(d, total);
-        }));
+        for (const QString &path : dict)
+        {
+            sync.addFuture(QtConcurrent::run(ctx.pool, [&, base, path, wildcard]() {
+                if (ctx.isCancelled())
+                    return;
+
+                const QString url = joinUrl(base, path);
+                const HttpResponse res = NetUtil::httpRequest(url, o.timeoutMs);
+
+                const bool interesting = res.statusCode > 0 && res.statusCode != 404
+                                         && res.statusCode != 400;
+                if (interesting) {
+                    DirRecord r;
+                    r.url          = url;
+                    r.statusCode   = res.statusCode;
+                    r.length       = res.contentLength();
+                    r.contentType  = res.contentType().section(QLatin1Char(';'), 0, 0);
+                    r.note         = riskNote(path, res.statusCode);
+                    if (wildcard && res.statusCode == 200)
+                        r.note += QStringLiteral("（疑似通配）");
+
+                    QMutexLocker locker(&mtx);
+                    hits.append(r);
+                }
+
+                const int d = ++done;
+                if (d % 40 == 0 || d == total)
+                    ctx.progress(d, total);
+            }));
+        }
     }
     sync.waitForFinished();
 

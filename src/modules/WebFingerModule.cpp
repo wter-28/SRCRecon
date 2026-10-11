@@ -3,6 +3,7 @@
 #include <QRegularExpression>
 #include <QStringList>
 
+#include "core/CdnDetect.h"
 #include "core/DemoData.h"
 #include "core/NetUtil.h"
 
@@ -149,7 +150,26 @@ void WebFingerModule::run(ModuleContext &ctx)
         return;
     }
 
-    const QStringList targets = buildTargets(o);
+    // 串联：优先使用前序模块发现的 Web 服务地址（端口扫描产出），并补充根目标
+    QStringList targets;
+    const QStringList fallback = buildTargets(o);
+    if (ctx.state)
+        targets = ctx.state->webTargets();
+    for (const QString &t : fallback)
+    {
+        if (!targets.contains(t))
+            targets.prepend(t);
+    }
+    targets.removeDuplicates();
+
+    const int cap = qMax(1, o.maxWebTargets);
+    if (targets.size() > cap)
+    {
+        ctx.warn(QStringLiteral("Web 目标 %1 个，超出上限 %2，仅检测前 %2 个")
+                     .arg(targets.size()).arg(cap));
+        targets = targets.mid(0, cap);
+    }
+
     if (targets.isEmpty()) {
         ctx.error(QStringLiteral("目标为空，跳过指纹识别"));
         return;
@@ -178,13 +198,22 @@ void WebFingerModule::run(ModuleContext &ctx)
         fp.poweredBy    = res.header(QStringLiteral("x-powered-by"));
         fp.technologies = detectTechnologies(res);
         fp.extraHeaders = collectHeaders(res);
+        fp.waf          = cdn::detectWaf(res);
+        fp.vulnHint     = cdn::cveHints(
+            fp.technologies + QLatin1Char(' ') + fp.server + QLatin1Char(' ') + fp.poweredBy,
+            res.body);
         out << fp;
 
-        ctx.ok(QStringLiteral("[%1] %2 | 标题：%3 | 指纹：%4")
+        // 登记存活 Web 服务，供目录探测与爬虫串联消费
+        if (ctx.state && res.statusCode > 0)
+            ctx.state->addAliveWeb(fp.url);
+
+        ctx.ok(QStringLiteral("[%1] %2 | 标题：%3 | 指纹：%4%5")
                    .arg(res.statusCode)
                    .arg(fp.url)
                    .arg(fp.title.isEmpty() ? QStringLiteral("-") : fp.title)
-                   .arg(fp.technologies.isEmpty() ? QStringLiteral("-") : fp.technologies));
+                   .arg(fp.technologies.isEmpty() ? QStringLiteral("-") : fp.technologies)
+                   .arg(fp.waf.isEmpty() ? QString() : QStringLiteral(" | WAF：") + fp.waf));
 
         ctx.progress(i + 1, targets.size());
     }

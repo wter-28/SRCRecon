@@ -3,7 +3,9 @@
 #include <QHostAddress>
 #include <QStringList>
 
+#include "core/NetUtil.h"
 #include "modules/AssetInfoModule.h"
+#include "modules/CdnModule.h"
 #include "modules/CrawlerModule.h"
 #include "modules/DirScanModule.h"
 #include "modules/PortScanModule.h"
@@ -16,6 +18,7 @@ ReconEngine::ReconEngine(QObject *parent)
     : QObject(parent), m_pool(std::make_unique<QThreadPool>())
 {
     m_modules << std::make_shared<SubdomainModule>()
+              << std::make_shared<CdnModule>()
               << std::make_shared<AssetInfoModule>()
               << std::make_shared<PortScanModule>()
               << std::make_shared<WebFingerModule>()
@@ -92,6 +95,7 @@ bool ReconEngine::normalizeTarget(EngineOptions &opt, QString *error)
 bool ReconEngine::isModuleEnabled(const QString &id, const EngineOptions &opt)
 {
     if (id == QLatin1String("subdomain")) return opt.doSubdomain;
+    if (id == QLatin1String("cdn"))       return opt.doCdn;
     if (id == QLatin1String("asset"))     return opt.doAsset;
     if (id == QLatin1String("port"))      return opt.doPort;
     if (id == QLatin1String("finger"))    return opt.doFinger;
@@ -125,10 +129,21 @@ void ReconEngine::stop()
 
 void ReconEngine::runPipeline(EngineOptions opt)
 {
+    ReconState state;
+    // 预置根目标，保证即使关闭子域名枚举，后续模块仍以根目标为起点
+    const QString rootIp = opt.isIp ? opt.host : NetUtil::resolveFirst(opt.host);
+    state.addHost(opt.host, rootIp, QStringLiteral("主域名"));
+    if (!opt.baseUrl.isEmpty())
+    {
+        state.addWebTarget(opt.baseUrl);
+        state.addAliveWeb(opt.baseUrl);
+    }
+
     ModuleContext ctx;
     ctx.opt = &opt;
     ctx.pool = m_pool.get();
     ctx.cancelFlag = &m_cancel;
+    ctx.state = &state;
 
     ctx.log = [this](const QString &level, const QString &text) {
         emit logMessage(level, text);
@@ -151,6 +166,9 @@ void ReconEngine::runPipeline(EngineOptions opt)
     };
     ctx.addUrls = [this](const UrlRecordList &v) {
         if (!v.isEmpty()) emit urlsFound(v);
+    };
+    ctx.addCdn = [this](const CdnRecordList &v) {
+        if (!v.isEmpty()) emit cdnFound(v);
     };
 
     emit logMessage(QStringLiteral("info"),
@@ -195,6 +213,10 @@ void ReconEngine::runPipeline(EngineOptions opt)
                                 .arg(m->displayName(), QString::fromUtf8(e.what())));
         }
     }
+
+    // 汇总「IP -> 虚拟主机 / 端口」资产聚合记录（依赖前述模块填充的共享状态）
+    if (opt.doCdn)
+        ctx.addCdn(CdnModule::buildAggregation(state));
 
     emit progressChanged(1, 1);
 

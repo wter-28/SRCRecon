@@ -67,6 +67,19 @@ struct WebFingerprint {
     QString poweredBy;
     QString technologies;  // 逗号分隔的技术栈
     QString extraHeaders;  // 其他关键响应头
+    QString waf;           // 识别到的 WAF / 安全设备
+    QString vulnHint;      // 版本号对应的已知漏洞线索
+};
+
+/// CDN / WAF 判定记录
+struct CdnRecord {
+    QString host;      // 主机名
+    QString ip;        // 解析 / 边缘 IP
+    QString category;  // 类别：CDN / WAF / 云 WAF
+    QString vendor;    // 厂商，如 Cloudflare、阿里云 CDN
+    QString cname;     // CNAME 链（逗号分隔）
+    QString realIp;    // 候选源站 IP（逗号分隔）
+    QString reason;    // 判定依据
 };
 
 /// 目录 / 敏感路径探测结果
@@ -92,6 +105,7 @@ using PortResultList     = QVector<PortResult>;
 using WebFingerprintList = QVector<WebFingerprint>;
 using DirRecordList      = QVector<DirRecord>;
 using UrlRecordList      = QVector<UrlRecord>;
+using CdnRecordList      = QVector<CdnRecord>;
 
 /// 根据 HTTP 状态码返回简短中文说明
 inline QString statusNote(int code)
@@ -121,8 +135,10 @@ Q_DECLARE_METATYPE(src::PortResult)
 Q_DECLARE_METATYPE(src::WebFingerprint)
 Q_DECLARE_METATYPE(src::DirRecord)
 Q_DECLARE_METATYPE(src::UrlRecord)
+Q_DECLARE_METATYPE(src::CdnRecord)
 Q_DECLARE_METATYPE(src::DomainAssetList)
 Q_DECLARE_METATYPE(src::PortResultList)
 Q_DECLARE_METATYPE(src::WebFingerprintList)
 Q_DECLARE_METATYPE(src::DirRecordList)
 Q_DECLARE_METATYPE(src::UrlRecordList)
+Q_DECLARE_METATYPE(src::CdnRecordList)

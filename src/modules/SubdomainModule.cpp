@@ -171,6 +171,9 @@ void SubdomainModule::run(ModuleContext &ctx)
                 a.source = candidates.value(h);
                 QMutexLocker locker(&mtx);
                 found.append(a);
+                // 写入共享状态，供 CDN / 端口 / 指纹 / 目录 / 爬虫串联消费
+                if (ctx.state)
+                    ctx.state->addHost(a.host, a.ip, a.source);
             }
 
             const int d = ++done;

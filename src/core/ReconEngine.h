@@ -46,6 +46,7 @@ signals:
     void fingerprintsFound(const src::WebFingerprintList &items);
     void dirsFound(const src::DirRecordList &items);
     void urlsFound(const src::UrlRecordList &items);
+    void cdnFound(const src::CdnRecordList &items);
 
     void finished(bool ok, const QString &summary);
 

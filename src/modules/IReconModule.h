@@ -6,6 +6,7 @@
 
 #include "core/Types.h"
 #include "core/EngineOptions.h"
+#include "core/ReconState.h"
 
 class QThreadPool;
 
@@ -13,10 +14,12 @@ namespace src {
 
 /// 模块运行时上下文：提供线程池、取消标志以及向引擎回传结果的回调。
 /// 所有回调都是线程安全的（内部通过 Qt 队列信号投递到主线程）。
+/// state 为跨模块共享的资产状态，用于串联后续模块的扫描目标。
 struct ModuleContext {
     const EngineOptions *opt = nullptr;
     QThreadPool *pool = nullptr;
     std::atomic<bool> *cancelFlag = nullptr;
+    ReconState *state = nullptr;
 
     std::function<void(const QString &level, const QString &text)> log;
     std::function<void(int done, int total)> progress;
@@ -29,6 +32,7 @@ struct ModuleContext {
     std::function<void(const WebFingerprintList &)> addFingerprints;
     std::function<void(const DirRecordList &)>      addDirs;
     std::function<void(const UrlRecordList &)>      addUrls;
+    std::function<void(const CdnRecordList &)>      addCdn;
 
     bool isCancelled() const { return cancelFlag && cancelFlag->load(); }
 

@@ -13,6 +13,7 @@
 #include <atomic>
 
 #include "core/DemoData.h"
+#include "core/JsExtract.h"
 #include "core/NetUtil.h"
 
 namespace src {
@@ -109,21 +110,44 @@ void CrawlerModule::run(ModuleContext &ctx)
         return;
     }
 
-    QString start = o.baseUrl;
-    if (start.isEmpty() && !o.host.isEmpty())
-        start = QStringLiteral("http://") + o.host;
-    if (start.isEmpty()) {
+    // 串联：从所有存活的 Web 服务起爬，并补充根目标
+    QStringList starts;
+    if (ctx.state)
+        starts = ctx.state->aliveWeb();
+    QString fallback = o.baseUrl;
+    if (fallback.isEmpty() && !o.host.isEmpty())
+        fallback = QStringLiteral("http://") + o.host;
+    if (!fallback.isEmpty() && !starts.contains(fallback))
+        starts.prepend(fallback);
+    starts.removeDuplicates();
+
+    const int cap = qMax(1, o.maxWebTargets);
+    if (starts.size() > cap)
+    {
+        ctx.warn(QStringLiteral("爬虫起始目标 %1 个，超出上限 %2，仅使用前 %2 个")
+                     .arg(starts.size()).arg(cap));
+        starts = starts.mid(0, cap);
+    }
+    if (starts.isEmpty())
+    {
         ctx.error(QStringLiteral("目标为空，跳过爬虫"));
         return;
     }
 
-    const QUrl startUrl(start);
-    const QString rootHost = startUrl.host();
     const int maxPages = qMax(1, o.crawlMaxPages);
     const int maxDepth = qMax(0, o.crawlDepth);
 
-    ctx.info(QStringLiteral("起始地址：%1，最大页面数：%2，最大深度：%3，跟随站外：%4")
-                 .arg(start)
+    // 允许同源的起始主机集合（多站点串联时均视为站内）
+    QSet<QString> allowedHosts;
+    for (const QString &s : starts)
+    {
+        const QString h = QUrl(s).host().toLower();
+        if (!h.isEmpty())
+            allowedHosts.insert(h);
+    }
+
+    ctx.info(QStringLiteral("起始地址 %1 个，最大页面数：%2，最大深度：%3，跟随站外：%4")
+                 .arg(starts.size())
                  .arg(maxPages)
                  .arg(maxDepth)
                  .arg(o.crawlExternal ? QStringLiteral("是") : QStringLiteral("否")));
@@ -131,13 +155,16 @@ void CrawlerModule::run(ModuleContext &ctx)
     struct Item { QString url; int depth; };
 
     QVector<Item> current;
-    current << Item{start, 0};
-
     QSet<QString> visited;
-    visited.insert(start);
+    for (const QString &s : starts)
+    {
+        current << Item{s, 0};
+        visited.insert(s);
+    }
 
     QMutex mtx;
     UrlRecordList records;
+    QSet<QString> extraKeys;  // 接口 / 敏感信息去重键
     std::atomic<int> fetched{0};
 
     while (!current.isEmpty() && !ctx.isCancelled()) {
@@ -184,7 +211,7 @@ void CrawlerModule::run(ModuleContext &ctx)
                     if (abs.isEmpty())
                         continue;
 
-                    const bool sameHost = QUrl(abs).host().compare(rootHost, Qt::CaseInsensitive) == 0;
+                    const bool sameHost = allowedHosts.contains(QUrl(abs).host().toLower());
                     if (!sameHost && !o.crawlExternal)
                         continue;
 
@@ -196,6 +223,32 @@ void CrawlerModule::run(ModuleContext &ctx)
                     }
 
                     local << Item{abs, item.depth + 1};
+                }
+
+                // 从 JS / 页面中提取 API 接口与敏感信息，回填为可测资产
+                QVector<UrlRecord> extra;
+                for (const QString &ep : jsx::extractEndpoints(res.body, item.url)) {
+                    UrlRecord r;
+                    r.url    = ep;
+                    r.source = QStringLiteral("JS接口");
+                    extra << r;
+                }
+                for (const QString &sec : jsx::extractSecrets(res.body)) {
+                    UrlRecord r;
+                    r.url    = sec;
+                    r.source = QStringLiteral("敏感信息");
+                    extra << r;
+                }
+
+                {
+                    QMutexLocker locker(&mtx);
+                    for (const UrlRecord &r : extra) {
+                        const QString k = r.source + QLatin1Char('|') + r.url;
+                        if (extraKeys.contains(k))
+                            continue;
+                        extraKeys.insert(k);
+                        records << r;
+                    }
                 }
 
                 if (!local.isEmpty()) {
@@ -214,7 +267,7 @@ void CrawlerModule::run(ModuleContext &ctx)
 
     // 站外链接单独补充记录
     for (const QString &u : visited) {
-        if (QUrl(u).host().compare(rootHost, Qt::CaseInsensitive) != 0) {
+        if (!allowedHosts.contains(QUrl(u).host().toLower())) {
             UrlRecord r;
             r.url = u;
             r.source = QStringLiteral("站外链接");
@@ -226,7 +279,7 @@ void CrawlerModule::run(ModuleContext &ctx)
               [](const UrlRecord &a, const UrlRecord &b) { return a.url < b.url; });
 
     ctx.addUrls(records);
-    ctx.ok(QStringLiteral("爬取完成，共记录 %1 条 URL").arg(records.size()));
+    ctx.ok(QStringLiteral("爬取完成，共记录 %1 条 URL / 接口 / 敏感信息").arg(records.size()));
 }
 
 } // namespace src

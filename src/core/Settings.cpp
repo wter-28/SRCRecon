@@ -37,6 +37,7 @@ void load(EngineOptions &opt)
     opt.demo       = s.value(key("engine/demo"), opt.demo).toBool();
 
     opt.doSubdomain = s.value(key("module/subdomain"), opt.doSubdomain).toBool();
+    opt.doCdn       = s.value(key("module/cdn"), opt.doCdn).toBool();
     opt.doAsset     = s.value(key("module/asset"), opt.doAsset).toBool();
     opt.doPort      = s.value(key("module/port"), opt.doPort).toBool();
     opt.doFinger    = s.value(key("module/finger"), opt.doFinger).toBool();
@@ -63,6 +64,7 @@ void save(const EngineOptions &opt)
     s.setValue(key("engine/demo"), opt.demo);
 
     s.setValue(key("module/subdomain"), opt.doSubdomain);
+    s.setValue(key("module/cdn"), opt.doCdn);
     s.setValue(key("module/asset"), opt.doAsset);
     s.setValue(key("module/port"), opt.doPort);
     s.setValue(key("module/finger"), opt.doFinger);

@@ -9,7 +9,7 @@ int main(int argc, char *argv[])
     QApplication app(argc, argv);
     QApplication::setApplicationName(QStringLiteral("SRCRecon"));
     QApplication::setOrganizationName(QStringLiteral("SRCRecon"));
-    QApplication::setApplicationVersion(QStringLiteral("1.0.0"));
+    QApplication::setApplicationVersion(QStringLiteral("1.1.0"));
 
     // 注册自定义类型，保证跨线程队列信号可以正常投递
     qRegisterMetaType<src::DomainAsset>("src::DomainAsset");
@@ -20,11 +20,13 @@ int main(int argc, char *argv[])
     qRegisterMetaType<src::WebFingerprint>("src::WebFingerprint");
     qRegisterMetaType<src::DirRecord>("src::DirRecord");
     qRegisterMetaType<src::UrlRecord>("src::UrlRecord");
+    qRegisterMetaType<src::CdnRecord>("src::CdnRecord");
     qRegisterMetaType<src::DomainAssetList>("src::DomainAssetList");
     qRegisterMetaType<src::PortResultList>("src::PortResultList");
     qRegisterMetaType<src::WebFingerprintList>("src::WebFingerprintList");
     qRegisterMetaType<src::DirRecordList>("src::DirRecordList");
     qRegisterMetaType<src::UrlRecordList>("src::UrlRecordList");
+    qRegisterMetaType<src::CdnRecordList>("src::CdnRecordList");
 
     QFont font = app.font();
     font.setFamily(QStringLiteral("Microsoft YaHei UI"));

@@ -18,6 +18,7 @@ struct EngineOptions {
 
     // 模块开关
     bool doSubdomain = true;
+    bool doCdn       = true;   // CDN / WAF 识别与资产聚合
     bool doAsset     = true;
     bool doPort      = true;
     bool doFinger    = true;
@@ -32,6 +33,9 @@ struct EngineOptions {
     bool    crawlExternal = false;               // 是否跟随站外链接
     int     crawlMaxPages = 80;
     int     crawlDepth = 2;
+
+    int     maxScanHosts = 200;                  // 端口扫描最多覆盖的独立 IP 数
+    int     maxWebTargets = 20;                  // 指纹/目录/爬虫串联的最大 Web 目标数
 
     QString icpApiUrl;  // 可选的 ICP 备案查询接口模板，含 {domain}
 };

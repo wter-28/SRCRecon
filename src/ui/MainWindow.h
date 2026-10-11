@@ -55,6 +55,7 @@ private slots:
     void onFingerprints(const src::WebFingerprintList &items);
     void onDirs(const src::DirRecordList &items);
     void onUrls(const src::UrlRecordList &items);
+    void onCdn(const src::CdnRecordList &items);
 
 private:
     void buildUi();
@@ -74,6 +75,7 @@ private:
     QLineEdit *m_targetEdit = nullptr;
     QCheckBox *m_demoCheck = nullptr;
     QCheckBox *m_cbSub = nullptr;
+    QCheckBox *m_cbCdn = nullptr;
     QCheckBox *m_cbAsset = nullptr;
     QCheckBox *m_cbPort = nullptr;
     QCheckBox *m_cbFinger = nullptr;
@@ -95,6 +97,7 @@ private:
     QTabWidget *m_tabs = nullptr;
     QTableWidget *m_subTable = nullptr;
     QTableWidget *m_assetTable = nullptr;
+    QTableWidget *m_cdnTable = nullptr;
     QTableWidget *m_portTable = nullptr;
     QTableWidget *m_fingerTable = nullptr;
     QTableWidget *m_dirTable = nullptr;
@@ -108,6 +111,7 @@ private:
 
     // 结构化结果数据（同时用于表格展示与导出）
     DomainAssetList    m_subdomains;
+    CdnRecordList      m_cdnRecords;
     PortResultList     m_ports;
     WebFingerprintList m_fingerprints;
     DirRecordList      m_dirs;
