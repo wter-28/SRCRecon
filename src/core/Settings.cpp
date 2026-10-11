@@ -43,6 +43,7 @@ void load(EngineOptions &opt)
     opt.doFinger    = s.value(key("module/finger"), opt.doFinger).toBool();
     opt.doDir       = s.value(key("module/dir"), opt.doDir).toBool();
     opt.doCrawl     = s.value(key("module/crawl"), opt.doCrawl).toBool();
+    opt.doExposure  = s.value(key("module/exposure"), opt.doExposure).toBool();
 
     opt.subdomainWordlist = s.value(key("wordlist/subdomain")).toString();
     opt.dirWordlist       = s.value(key("wordlist/dir")).toString();
@@ -51,6 +52,7 @@ void load(EngineOptions &opt)
     opt.crawlMaxPages     = s.value(key("crawl/maxPages"), opt.crawlMaxPages).toInt();
     opt.crawlDepth        = s.value(key("crawl/depth"), opt.crawlDepth).toInt();
     opt.subdomainMax      = s.value(key("subdomain/max"), opt.subdomainMax).toInt();
+    opt.exposureMaxProbe  = s.value(key("exposure/maxProbe"), opt.exposureMaxProbe).toInt();
 
     opt.icpApiUrl = icpApiUrl();
 }
@@ -70,6 +72,7 @@ void save(const EngineOptions &opt)
     s.setValue(key("module/finger"), opt.doFinger);
     s.setValue(key("module/dir"), opt.doDir);
     s.setValue(key("module/crawl"), opt.doCrawl);
+    s.setValue(key("module/exposure"), opt.doExposure);
 
     s.setValue(key("wordlist/subdomain"), opt.subdomainWordlist);
     s.setValue(key("wordlist/dir"), opt.dirWordlist);

@@ -194,7 +194,93 @@ inline const QStringList &directories()
         QStringLiteral("doc/"), QStringLiteral("help/"),
         QStringLiteral("error"), QStringLiteral("403"),
         QStringLiteral("404"), QStringLiteral("500"),
-        QStringLiteral("crossdomain.xml"), QStringLiteral("clientaccesspolicy.xml")
+        QStringLiteral("clientaccesspolicy.xml"),
+
+        // ---------------- 版本控制泄露（扩展） ----------------
+        QStringLiteral(".git/index"), QStringLiteral(".git/logs/HEAD"),
+        QStringLiteral(".git/COMMIT_EDITMSG"), QStringLiteral(".gitignore"),
+        QStringLiteral(".git-credentials"), QStringLiteral(".svn/wc.db"),
+        QStringLiteral(".svn/"), QStringLiteral(".hg/"),
+        QStringLiteral(".bzr/"),
+
+        // ---------------- .env 变体 ----------------
+        QStringLiteral(".env.local"), QStringLiteral(".env.dev"),
+        QStringLiteral(".env.development"), QStringLiteral(".env.prod"),
+        QStringLiteral(".env.production"), QStringLiteral(".env.test"),
+        QStringLiteral(".env.save"), QStringLiteral(".env.old"),
+        QStringLiteral(".env.example"),
+
+        // ---------------- 应用配置文件 ----------------
+        QStringLiteral("config.php"), QStringLiteral("config.php.bak"),
+        QStringLiteral("application.yml"), QStringLiteral("application.properties"),
+        QStringLiteral("appsettings.json"), QStringLiteral("credentials.json"),
+        QStringLiteral("secrets.yml"),
+
+        // ---------------- WordPress ----------------
+        QStringLiteral("wp-config.php"), QStringLiteral("wp-config.php~"),
+        QStringLiteral("wp-config.php.save"), QStringLiteral("wp-content/"),
+        QStringLiteral("wp-includes/"), QStringLiteral("wp-json/"),
+        QStringLiteral("readme.html"),
+
+        // ---------------- 后台管理入口 ----------------
+        QStringLiteral("admin.php"), QStringLiteral("admin/login.php"),
+        QStringLiteral("manage/login.php"), QStringLiteral("backend/"),
+        QStringLiteral("admincp/"),
+
+        // ---------------- Swagger / OpenAPI 变体 ----------------
+        QStringLiteral("api/v3/"), QStringLiteral("openapi.json"),
+        QStringLiteral("openapi.yaml"), QStringLiteral("swagger.json"),
+        QStringLiteral("swagger.yaml"),
+
+        // ---------------- Spring Boot Actuator 子路径 ----------------
+        QStringLiteral("actuator/info"), QStringLiteral("actuator/threaddump"),
+        QStringLiteral("actuator/trace"), QStringLiteral("actuator/httptrace"),
+        QStringLiteral("actuator/loggers"), QStringLiteral("actuator/configprops"),
+
+        // ---------------- 监控 / 中间件 ----------------
+        QStringLiteral("druid/sql.html"), QStringLiteral("druid/websession.html"),
+        QStringLiteral("jenkins/manage"), QStringLiteral("zabbix.php"),
+        QStringLiteral("adminer/"), QStringLiteral("solr/admin/"),
+        QStringLiteral("_cluster/health"),
+
+        // ---------------- 备份 / 源码包命名 ----------------
+        QStringLiteral("backup.tar"), QStringLiteral("backup.tar.gz"),
+        QStringLiteral("database.sql"), QStringLiteral("mysql.sql"),
+        QStringLiteral("web.rar"), QStringLiteral("www.rar"),
+        QStringLiteral("source.zip"), QStringLiteral("src.zip"),
+
+        // ---------------- 常见目录 ----------------
+        QStringLiteral("data/"), QStringLiteral("tmp/"),
+        QStringLiteral("temp/"), QStringLiteral("logs/"),
+        QStringLiteral("log/"), QStringLiteral("cache/"),
+        QStringLiteral("private/"),
+
+        // ---------------- 默认入口 / 测试文件 ----------------
+        QStringLiteral("index.htm"), QStringLiteral("default.php"),
+        QStringLiteral("main"), QStringLiteral("test/"),
+        QStringLiteral("t.php"), QStringLiteral("shell.php"),
+        QStringLiteral("1.php"),
+
+        // ---------------- 项目 / 依赖清单 ----------------
+        QStringLiteral("package-lock.json"), QStringLiteral("composer.lock"),
+        QStringLiteral("yarn.lock"), QStringLiteral(".travis.yml"),
+        QStringLiteral("requirements.txt"), QStringLiteral("pom.xml"),
+
+        // ---------------- 密钥 / 敏感信息 ----------------
+        QStringLiteral(".ssh/authorized_keys"), QStringLiteral("id_dsa"),
+        QStringLiteral(".aws/credentials"), QStringLiteral(".netrc"),
+        QStringLiteral("secret.txt"), QStringLiteral("secrets.txt"),
+
+        // ---------------- CMS / 论坛 ----------------
+        QStringLiteral("uc_client/"), QStringLiteral("dedecms/"),
+        QStringLiteral("discuz/"), QStringLiteral("forum.php"),
+        QStringLiteral("bbs/"), QStringLiteral("cgi-bin/"),
+
+        // ---------------- 公开信息 / 元数据 ----------------
+        QStringLiteral(".well-known/security.txt"),
+        QStringLiteral(".well-known/change-password"), QStringLiteral(".well-known/"),
+        QStringLiteral("humans.txt"), QStringLiteral("ads.txt"),
+        QStringLiteral("manifest.json")
     };
     return w;
 }

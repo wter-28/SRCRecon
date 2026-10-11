@@ -56,6 +56,8 @@ private slots:
     void onDirs(const src::DirRecordList &items);
     void onUrls(const src::UrlRecordList &items);
     void onCdn(const src::CdnRecordList &items);
+    void onEndpoints(const src::ApiEndpointList &items);
+    void onSummary(const src::AssetSummaryList &items);
 
 private:
     void buildUi();
@@ -81,6 +83,7 @@ private:
     QCheckBox *m_cbFinger = nullptr;
     QCheckBox *m_cbDir = nullptr;
     QCheckBox *m_cbCrawl = nullptr;
+    QCheckBox *m_cbExposure = nullptr;
     QSpinBox *m_threadsSpin = nullptr;
     QSpinBox *m_timeoutSpin = nullptr;
     QLineEdit *m_portSpecEdit = nullptr;
@@ -95,6 +98,7 @@ private:
 
     // 结果控件
     QTabWidget *m_tabs = nullptr;
+    QTableWidget *m_summaryTable = nullptr;
     QTableWidget *m_subTable = nullptr;
     QTableWidget *m_assetTable = nullptr;
     QTableWidget *m_cdnTable = nullptr;
@@ -102,6 +106,7 @@ private:
     QTableWidget *m_fingerTable = nullptr;
     QTableWidget *m_dirTable = nullptr;
     QTableWidget *m_urlTable = nullptr;
+    QTableWidget *m_endpointTable = nullptr;
     QPlainTextEdit *m_logView = nullptr;
 
     QLabel *m_stageLabel = nullptr;
@@ -110,12 +115,14 @@ private:
     ReconEngine *m_engine = nullptr;
 
     // 结构化结果数据（同时用于表格展示与导出）
+    AssetSummaryList   m_summary;
     DomainAssetList    m_subdomains;
     CdnRecordList      m_cdnRecords;
     PortResultList     m_ports;
     WebFingerprintList m_fingerprints;
     DirRecordList      m_dirs;
     UrlRecordList      m_urls;
+    ApiEndpointList    m_endpoints;
     QVector<WhoisInfo> m_whoisList;
     QVector<IcpInfo>   m_icpList;
     QVector<IpLocation> m_ipList;

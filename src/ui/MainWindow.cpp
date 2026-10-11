@@ -111,6 +111,8 @@ MainWindow::MainWindow(QWidget *parent)
     connect(m_engine, &ReconEngine::dirsFound, this, &MainWindow::onDirs);
     connect(m_engine, &ReconEngine::urlsFound, this, &MainWindow::onUrls);
     connect(m_engine, &ReconEngine::cdnFound, this, &MainWindow::onCdn);
+    connect(m_engine, &ReconEngine::endpointsFound, this, &MainWindow::onEndpoints);
+    connect(m_engine, &ReconEngine::summaryFound, this, &MainWindow::onSummary);
     connect(m_engine, &ReconEngine::finished, this, &MainWindow::onEngineFinished);
 
     connect(m_startBtn, &QPushButton::clicked, this, &MainWindow::onStart);
@@ -208,7 +210,9 @@ QWidget *MainWindow::buildSidePanel()
     m_cbFinger = new QCheckBox(QStringLiteral("Web 指纹识别（WAF / CVE 线索）"));
     m_cbDir = new QCheckBox(QStringLiteral("目录 / 敏感路径探测"));
     m_cbCrawl = new QCheckBox(QStringLiteral("爬虫 / JS 接口与敏感信息收集"));
-    for (QCheckBox *cb : {m_cbSub, m_cbCdn, m_cbAsset, m_cbPort, m_cbFinger, m_cbDir, m_cbCrawl})
+    m_cbExposure = new QCheckBox(QStringLiteral("接口 / 暴露面分析"));
+    for (QCheckBox *cb : {m_cbSub, m_cbCdn, m_cbAsset, m_cbPort, m_cbFinger, m_cbDir, m_cbCrawl,
+                          m_cbExposure})
         mv->addWidget(cb);
     v->addWidget(modBox);
 
@@ -296,30 +300,40 @@ QWidget *MainWindow::buildResultTabs()
 {
     m_tabs = new QTabWidget(this);
 
+    m_summaryTable = makeTable(this, {QStringLiteral("主机/IP"), QStringLiteral("类别"),
+                                      QStringLiteral("发现"), QStringLiteral("来源"),
+                                      QStringLiteral("危险级别"), QStringLiteral("评分"),
+                                      QStringLiteral("依据")});
     m_subTable    = makeTable(this, {QStringLiteral("主机"), QStringLiteral("IP"), QStringLiteral("来源")});
     m_assetTable  = makeTable(this, {QStringLiteral("类别"), QStringLiteral("项目"), QStringLiteral("值")});
     m_cdnTable    = makeTable(this, {QStringLiteral("主机"), QStringLiteral("IP"),
                                      QStringLiteral("类别"), QStringLiteral("厂商"),
                                      QStringLiteral("CNAME"), QStringLiteral("源站候选"),
-                                     QStringLiteral("依据")});
+                                     QStringLiteral("置信度"), QStringLiteral("依据")});
     m_portTable   = makeTable(this, {QStringLiteral("主机"), QStringLiteral("端口"),
                                      QStringLiteral("服务"), QStringLiteral("Banner")});
     m_fingerTable = makeTable(this, {QStringLiteral("URL"), QStringLiteral("状态"), QStringLiteral("标题"),
                                      QStringLiteral("Server"), QStringLiteral("X-Powered-By"),
                                      QStringLiteral("指纹"), QStringLiteral("WAF"),
-                                     QStringLiteral("漏洞线索")});
+                                     QStringLiteral("漏洞线索(仅供参考)")});
     m_dirTable    = makeTable(this, {QStringLiteral("URL"), QStringLiteral("状态"),
                                      QStringLiteral("长度"), QStringLiteral("类型"),
                                      QStringLiteral("备注")});
     m_urlTable    = makeTable(this, {QStringLiteral("URL"), QStringLiteral("状态"),
                                      QStringLiteral("类型"), QStringLiteral("长度"),
                                      QStringLiteral("来源")});
+    m_endpointTable = makeTable(this, {QStringLiteral("URL"), QStringLiteral("方法"),
+                                       QStringLiteral("来源"), QStringLiteral("状态"),
+                                       QStringLiteral("参数"), QStringLiteral("风险"),
+                                       QStringLiteral("备注")});
 
     m_logView = new QPlainTextEdit(this);
     m_logView->setReadOnly(true);
     m_logView->setMaximumBlockCount(5000);
     m_logView->setStyleSheet(QStringLiteral("font-family:Consolas,'Microsoft YaHei';font-size:12px;"));
 
+    // 「优先级总览」置于首个选项卡，便于第一时间查看高价值目标
+    m_tabs->addTab(m_summaryTable, QStringLiteral("优先级总览"));
     m_tabs->addTab(m_subTable, QStringLiteral("子域名"));
     m_tabs->addTab(m_assetTable, QStringLiteral("资产信息"));
     m_tabs->addTab(m_cdnTable, QStringLiteral("CDN/资产"));
@@ -327,6 +341,7 @@ QWidget *MainWindow::buildResultTabs()
     m_tabs->addTab(m_fingerTable, QStringLiteral("Web 指纹"));
     m_tabs->addTab(m_dirTable, QStringLiteral("目录探测"));
     m_tabs->addTab(m_urlTable, QStringLiteral("URL"));
+    m_tabs->addTab(m_endpointTable, QStringLiteral("接口/暴露面"));
     m_tabs->addTab(m_logView, QStringLiteral("运行日志"));
     return m_tabs;
 }
@@ -363,6 +378,7 @@ void MainWindow::collectOptions(EngineOptions &opt) const
     opt.doFinger = m_cbFinger->isChecked();
     opt.doDir = m_cbDir->isChecked();
     opt.doCrawl = m_cbCrawl->isChecked();
+    opt.doExposure = m_cbExposure->isChecked();
     opt.threads = m_threadsSpin->value();
     opt.timeoutMs = m_timeoutSpin->value();
     opt.portSpec = m_portSpecEdit->text().trimmed();
@@ -399,7 +415,7 @@ void MainWindow::onStart()
     settings::setIcpApiUrl(opt.icpApiUrl);
 
     clearResults();
-    m_tabs->setCurrentIndex(7);
+    m_tabs->setCurrentIndex(9);  // 切到「运行日志」查看实时进度
     appendLog(QStringLiteral("info"), QStringLiteral("任务启动：%1").arg(opt.rawTarget));
     m_engine->start(opt);
 }
@@ -436,6 +452,7 @@ void MainWindow::setBusy(bool busy)
 
 void MainWindow::clearResults()
 {
+    m_summary.clear();
     m_subdomains.clear();
     m_ports.clear();
     m_fingerprints.clear();
@@ -445,9 +462,10 @@ void MainWindow::clearResults()
     m_icpList.clear();
     m_ipList.clear();
     m_cdnRecords.clear();
+    m_endpoints.clear();
 
-    for (QTableWidget *t : {m_subTable, m_assetTable, m_cdnTable, m_portTable, m_fingerTable,
-                            m_dirTable, m_urlTable})
+    for (QTableWidget *t : {m_summaryTable, m_subTable, m_assetTable, m_cdnTable, m_portTable,
+                            m_fingerTable, m_dirTable, m_urlTable, m_endpointTable})
         t->setRowCount(0);
 
     m_logView->clear();
@@ -457,14 +475,16 @@ void MainWindow::clearResults()
 
 void MainWindow::updateTabTitles()
 {
-    m_tabs->setTabText(0, QStringLiteral("子域名 (%1)").arg(m_subdomains.size()));
-    m_tabs->setTabText(1, QStringLiteral("资产信息 (%1)")
+    m_tabs->setTabText(0, QStringLiteral("优先级总览 (%1)").arg(m_summary.size()));
+    m_tabs->setTabText(1, QStringLiteral("子域名 (%1)").arg(m_subdomains.size()));
+    m_tabs->setTabText(2, QStringLiteral("资产信息 (%1)")
                               .arg(m_whoisList.size() + m_icpList.size() + m_ipList.size()));
-    m_tabs->setTabText(2, QStringLiteral("CDN/资产 (%1)").arg(m_cdnRecords.size()));
-    m_tabs->setTabText(3, QStringLiteral("端口 (%1)").arg(m_ports.size()));
-    m_tabs->setTabText(4, QStringLiteral("Web 指纹 (%1)").arg(m_fingerprints.size()));
-    m_tabs->setTabText(5, QStringLiteral("目录探测 (%1)").arg(m_dirs.size()));
-    m_tabs->setTabText(6, QStringLiteral("URL (%1)").arg(m_urls.size()));
+    m_tabs->setTabText(3, QStringLiteral("CDN/资产 (%1)").arg(m_cdnRecords.size()));
+    m_tabs->setTabText(4, QStringLiteral("端口 (%1)").arg(m_ports.size()));
+    m_tabs->setTabText(5, QStringLiteral("Web 指纹 (%1)").arg(m_fingerprints.size()));
+    m_tabs->setTabText(6, QStringLiteral("目录探测 (%1)").arg(m_dirs.size()));
+    m_tabs->setTabText(7, QStringLiteral("URL (%1)").arg(m_urls.size()));
+    m_tabs->setTabText(8, QStringLiteral("接口/暴露面 (%1)").arg(m_endpoints.size()));
 }
 
 void MainWindow::appendLog(const QString &level, const QString &text)
@@ -643,8 +663,38 @@ void MainWindow::onCdn(const CdnRecordList &items)
                             c.vendor.isEmpty() ? QStringLiteral("-") : c.vendor,
                             c.cname.isEmpty() ? QStringLiteral("-") : c.cname,
                             c.realIp.isEmpty() ? QStringLiteral("-") : c.realIp,
+                            QString::number(c.confidence),
                             c.reason});
     m_cdnTable->setUpdatesEnabled(true);
+    updateTabTitles();
+}
+
+void MainWindow::onEndpoints(const ApiEndpointList &items)
+{
+    m_endpoints += items;
+    m_endpointTable->setUpdatesEnabled(false);
+    for (const ApiEndpoint &e : items)
+        addRow(m_endpointTable, {e.url, e.method, e.source,
+                                 e.statusCode > 0 ? QString::number(e.statusCode)
+                                                  : QStringLiteral("-"),
+                                 e.params.isEmpty() ? QStringLiteral("-") : e.params,
+                                 e.severity, e.note});
+    m_endpointTable->setUpdatesEnabled(true);
+    updateTabTitles();
+}
+
+void MainWindow::onSummary(const AssetSummaryList &items)
+{
+    m_summary += items;
+    m_summaryTable->setUpdatesEnabled(false);
+    for (const AssetSummary &s : items)
+    {
+        const QString host = s.host.isEmpty() ? s.ip : s.host;
+        addRow(m_summaryTable, {host, s.category, s.value, s.source, s.severity,
+                                QString::number(s.score), s.evidence});
+    }
+    m_summaryTable->setUpdatesEnabled(true);
+    m_summaryTable->resizeColumnToContents(0);
     updateTabTitles();
 }
 
@@ -672,6 +722,13 @@ void MainWindow::onExportCsv()
         out << "\n# " << title << "\n";
     };
 
+    section(QStringLiteral("优先级总览"));
+    out << "主机/IP,类别,发现,来源,危险级别,评分,依据\n";
+    for (const AssetSummary &s : m_summary)
+        out << csvEscape(s.host.isEmpty() ? s.ip : s.host) << ',' << csvEscape(s.category) << ','
+            << csvEscape(s.value) << ',' << csvEscape(s.source) << ',' << csvEscape(s.severity) << ','
+            << s.score << ',' << csvEscape(s.evidence) << '\n';
+
     section(QStringLiteral("子域名"));
     out << "主机,IP,来源\n";
     for (const DomainAsset &d : m_subdomains)
@@ -694,31 +751,39 @@ void MainWindow::onExportCsv()
             << csvEscape(p.banner) << '\n';
 
     section(QStringLiteral("CDN / 资产"));
-    out << "主机,IP,类别,厂商,CNAME,源站候选,依据\n";
+    out << "主机,IP,类别,厂商,CNAME,源站候选,置信度,依据\n";
     for (const CdnRecord &c : m_cdnRecords)
         out << csvEscape(c.host) << ',' << csvEscape(c.ip) << ',' << csvEscape(c.category) << ','
             << csvEscape(c.vendor) << ',' << csvEscape(c.cname) << ',' << csvEscape(c.realIp) << ','
-            << csvEscape(c.reason) << '\n';
+            << c.confidence << ',' << csvEscape(c.reason) << '\n';
 
     section(QStringLiteral("Web 指纹"));
-    out << "URL,状态,标题,Server,X-Powered-By,指纹,WAF,漏洞线索\n";
+    out << "URL,状态,标题,Server,X-Powered-By,指纹,WAF,漏洞线索(仅供参考),危险级别\n";
     for (const WebFingerprint &w : m_fingerprints)
         out << csvEscape(w.url) << ',' << w.statusCode << ',' << csvEscape(w.title) << ','
             << csvEscape(w.server) << ',' << csvEscape(w.poweredBy) << ','
             << csvEscape(w.technologies) << ',' << csvEscape(w.waf) << ','
-            << csvEscape(w.vulnHint) << '\n';
+            << csvEscape(w.vulnHint) << ',' << csvEscape(w.severity) << '\n';
 
     section(QStringLiteral("目录探测"));
-    out << "URL,状态,长度,类型,备注\n";
+    out << "URL,状态,长度,类型,备注,危险级别\n";
     for (const DirRecord &d : m_dirs)
         out << csvEscape(d.url) << ',' << d.statusCode << ',' << d.length << ','
-            << csvEscape(d.contentType) << ',' << csvEscape(d.note) << '\n';
+            << csvEscape(d.contentType) << ',' << csvEscape(d.note) << ','
+            << csvEscape(d.severity) << '\n';
 
     section(QStringLiteral("URL"));
     out << "URL,状态,类型,长度,来源\n";
     for (const UrlRecord &u : m_urls)
         out << csvEscape(u.url) << ',' << u.statusCode << ',' << csvEscape(u.contentType) << ','
             << u.length << ',' << csvEscape(u.source) << '\n';
+
+    section(QStringLiteral("接口/暴露面"));
+    out << "URL,方法,来源,状态,参数,风险,备注\n";
+    for (const ApiEndpoint &e : m_endpoints)
+        out << csvEscape(e.url) << ',' << csvEscape(e.method) << ',' << csvEscape(e.source) << ','
+            << e.statusCode << ',' << csvEscape(e.params) << ',' << csvEscape(e.severity) << ','
+            << csvEscape(e.note) << '\n';
 
     f.close();
     QMessageBox::information(this, QStringLiteral("导出完成"), QStringLiteral("已导出：%1").arg(file));
@@ -734,6 +799,18 @@ void MainWindow::onExportJson()
 
     QJsonObject root;
     root.insert(QStringLiteral("tool"), QStringLiteral("SRCRecon"));
+
+    QJsonArray summaryArr;
+    for (const AssetSummary &s : m_summary)
+        summaryArr.append(QJsonObject{{QStringLiteral("host"), s.host},
+                                      {QStringLiteral("ip"), s.ip},
+                                      {QStringLiteral("category"), s.category},
+                                      {QStringLiteral("value"), s.value},
+                                      {QStringLiteral("source"), s.source},
+                                      {QStringLiteral("severity"), s.severity},
+                                      {QStringLiteral("score"), s.score},
+                                      {QStringLiteral("evidence"), s.evidence}});
+    root.insert(QStringLiteral("summary"), summaryArr);
 
     QJsonArray subs;
     for (const DomainAsset &d : m_subdomains)
@@ -790,6 +867,7 @@ void MainWindow::onExportJson()
                                   {QStringLiteral("vendor"), c.vendor},
                                   {QStringLiteral("cname"), c.cname},
                                   {QStringLiteral("realIp"), c.realIp},
+                                  {QStringLiteral("confidence"), c.confidence},
                                   {QStringLiteral("reason"), c.reason}});
     root.insert(QStringLiteral("cdn"), cdnArr);
 
@@ -802,7 +880,8 @@ void MainWindow::onExportJson()
                                      {QStringLiteral("poweredBy"), w.poweredBy},
                                      {QStringLiteral("technologies"), w.technologies},
                                      {QStringLiteral("waf"), w.waf},
-                                     {QStringLiteral("vulnHint"), w.vulnHint}});
+                                     {QStringLiteral("vulnHint"), w.vulnHint},
+                                     {QStringLiteral("severity"), w.severity}});
     root.insert(QStringLiteral("fingerprints"), fingerArr);
 
     QJsonArray dirArr;
@@ -811,7 +890,8 @@ void MainWindow::onExportJson()
                                   {QStringLiteral("status"), d.statusCode},
                                   {QStringLiteral("length"), d.length},
                                   {QStringLiteral("contentType"), d.contentType},
-                                  {QStringLiteral("note"), d.note}});
+                                  {QStringLiteral("note"), d.note},
+                                  {QStringLiteral("severity"), d.severity}});
     root.insert(QStringLiteral("directories"), dirArr);
 
     QJsonArray urlArr;
@@ -822,6 +902,17 @@ void MainWindow::onExportJson()
                                   {QStringLiteral("length"), u.length},
                                   {QStringLiteral("source"), u.source}});
     root.insert(QStringLiteral("urls"), urlArr);
+
+    QJsonArray endpointArr;
+    for (const ApiEndpoint &e : m_endpoints)
+        endpointArr.append(QJsonObject{{QStringLiteral("url"), e.url},
+                                       {QStringLiteral("method"), e.method},
+                                       {QStringLiteral("source"), e.source},
+                                       {QStringLiteral("status"), e.statusCode},
+                                       {QStringLiteral("params"), e.params},
+                                       {QStringLiteral("severity"), e.severity},
+                                       {QStringLiteral("note"), e.note}});
+    root.insert(QStringLiteral("endpoints"), endpointArr);
 
     QFile f(file);
     if (!f.open(QIODevice::WriteOnly | QIODevice::Text)) {
@@ -838,16 +929,18 @@ void MainWindow::onAbout()
     QMessageBox::about(
         this, QStringLiteral("关于 SRC 信息收集工具"),
         QStringLiteral(
-            "<h3>SRC 信息收集工具 v1.1</h3>"
+            "<h3>SRC 信息收集工具 v1.2</h3>"
             "<p>基于 Qt6 / C++17 的多线程信息收集客户端，包含：</p>"
             "<ul>"
             "<li>子域名枚举：证书透明日志（crt.sh）+ 字典 DNS 爆破，含泛解析检测</li>"
             "<li>基础资产信息：Whois、ICP 备案、IP 归属地</li>"
-            "<li>CDN / WAF 识别：CNAME 链与响应头签名判定 CDN/WAF 厂商，跳过边缘 IP、探测源站候选并聚合资产</li>"
+            "<li>CDN / WAF 识别：CNAME 链与响应头签名判定厂商，结合已知网段评估置信度，跳过边缘 IP、探测源站候选并聚合资产</li>"
             "<li>端口与服务扫描：按 IP 聚合去重，常见端口 / 自定义范围，Banner 指纹识别</li>"
-            "<li>Web 指纹识别：标题、Server、中间件、CMS、框架，附 WAF 与版本漏洞线索</li>"
+            "<li>Web 指纹识别：标题、Server、中间件、CMS、框架，附 WAF 标注与版本漏洞线索（仅供参考）</li>"
+            "<li>接口 / 暴露面分析：Swagger / OpenAPI 文档解析、Actuator、.git/.env 等敏感文件与表单参数发现</li>"
             "<li>目录与敏感路径探测：内置字典并发探测、通配响应检测</li>"
             "<li>爬虫与链接收集：广度优先抓取，提取链接 / JS 资产，并从 JS 中提取 API 接口与敏感信息</li>"
+            "<li>优先级总览：融合端口 / 指纹 / 敏感路径 / 接口等发现，按危险级别与评分排序，快速定位重点</li>"
             "</ul>"
             "<p style=\"color:#c0392b;\">仅限用于已获得合法授权的安全测试与 SRC 众测场景，"
             "请勿对未授权目标使用。</p>"));

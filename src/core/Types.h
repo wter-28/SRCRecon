@@ -69,6 +69,7 @@ struct WebFingerprint {
     QString extraHeaders;  // 其他关键响应头
     QString waf;           // 识别到的 WAF / 安全设备
     QString vulnHint;      // 版本号对应的已知漏洞线索
+    QString severity;      // 风险等级：高 / 中 / 低 / 信息
 };
 
 /// CDN / WAF 判定记录
@@ -80,6 +81,7 @@ struct CdnRecord {
     QString cname;     // CNAME 链（逗号分隔）
     QString realIp;    // 候选源站 IP（逗号分隔）
     QString reason;    // 判定依据
+    int confidence = 0; // 置信度 0-100：CDN/WAF 行越高越确信是边缘；源站候选行越高越可能是真实源站
 };
 
 /// 目录 / 敏感路径探测结果
@@ -89,6 +91,7 @@ struct DirRecord {
     qint64 length = 0;
     QString contentType;
     QString note;
+    QString severity;  // 风险等级：高 / 中 / 低 / 信息
 };
 
 /// URL / 链接收集结果
@@ -100,12 +103,37 @@ struct UrlRecord {
     QString source;  // 爬虫页面 / JS文件 / 表单
 };
 
+/// 接口 / 暴露面分析结果
+struct ApiEndpoint {
+    QString url;
+    QString method;      // HTTP 方法（GET / POST ...）
+    QString source;      // 来源：Swagger / OpenAPI / Actuator / 敏感文件 / JS接口 / 表单
+    int     statusCode = 0;
+    QString params;      // 参数名（逗号分隔）
+    QString severity;    // 风险等级：高 / 中 / 低 / 信息
+    QString note;        // 风险说明
+};
+
+/// 资产优先级总览条目：聚合各模块发现，附带危险级别与数值评分
+struct AssetSummary {
+    QString host;      // 主机名
+    QString ip;        // IP
+    QString category;  // 类别：端口 / Web指纹 / 敏感路径 / 接口 / CDN / CDN源站 / IP资产
+    QString value;     // 发现内容（URL / 主机:端口 / 厂商等）
+    QString source;    // 来源模块
+    QString severity;  // 危险级别：高 / 中 / 低 / 信息
+    int     score = 0; // 数值评分（越高越优先）
+    QString evidence;  // 依据 / 证据
+};
+
 using DomainAssetList    = QVector<DomainAsset>;
 using PortResultList     = QVector<PortResult>;
 using WebFingerprintList = QVector<WebFingerprint>;
 using DirRecordList      = QVector<DirRecord>;
 using UrlRecordList      = QVector<UrlRecord>;
 using CdnRecordList      = QVector<CdnRecord>;
+using ApiEndpointList    = QVector<ApiEndpoint>;
+using AssetSummaryList   = QVector<AssetSummary>;
 
 /// 根据 HTTP 状态码返回简短中文说明
 inline QString statusNote(int code)
@@ -136,9 +164,13 @@ Q_DECLARE_METATYPE(src::WebFingerprint)
 Q_DECLARE_METATYPE(src::DirRecord)
 Q_DECLARE_METATYPE(src::UrlRecord)
 Q_DECLARE_METATYPE(src::CdnRecord)
+Q_DECLARE_METATYPE(src::ApiEndpoint)
+Q_DECLARE_METATYPE(src::AssetSummary)
 Q_DECLARE_METATYPE(src::DomainAssetList)
 Q_DECLARE_METATYPE(src::PortResultList)
 Q_DECLARE_METATYPE(src::WebFingerprintList)
 Q_DECLARE_METATYPE(src::DirRecordList)
 Q_DECLARE_METATYPE(src::UrlRecordList)
 Q_DECLARE_METATYPE(src::CdnRecordList)
+Q_DECLARE_METATYPE(src::ApiEndpointList)
+Q_DECLARE_METATYPE(src::AssetSummaryList)

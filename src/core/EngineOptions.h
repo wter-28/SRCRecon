@@ -22,8 +22,9 @@ struct EngineOptions {
     bool doAsset     = true;
     bool doPort      = true;
     bool doFinger    = true;
-    bool doDir       = true;
-    bool doCrawl     = true;
+    bool    doDir       = true;
+    bool    doCrawl     = true;
+    bool    doExposure  = true;   // 接口 / 暴露面分析
 
     // 模块参数
     QString subdomainWordlist;                   // 空 = 使用内置字典
@@ -36,6 +37,7 @@ struct EngineOptions {
 
     int     maxScanHosts = 200;                  // 端口扫描最多覆盖的独立 IP 数
     int     maxWebTargets = 20;                  // 指纹/目录/爬虫串联的最大 Web 目标数
+    int     exposureMaxProbe = 200;              // 暴露面探测的最大请求数
 
     QString icpApiUrl;  // 可选的 ICP 备案查询接口模板，含 {domain}
 };

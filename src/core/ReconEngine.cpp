@@ -3,11 +3,13 @@
 #include <QHostAddress>
 #include <QStringList>
 
+#include "core/AssetRank.h"
 #include "core/NetUtil.h"
 #include "modules/AssetInfoModule.h"
 #include "modules/CdnModule.h"
 #include "modules/CrawlerModule.h"
 #include "modules/DirScanModule.h"
+#include "modules/ExposureModule.h"
 #include "modules/PortScanModule.h"
 #include "modules/SubdomainModule.h"
 #include "modules/WebFingerModule.h"
@@ -23,7 +25,8 @@ ReconEngine::ReconEngine(QObject *parent)
               << std::make_shared<PortScanModule>()
               << std::make_shared<WebFingerModule>()
               << std::make_shared<DirScanModule>()
-              << std::make_shared<CrawlerModule>();
+              << std::make_shared<CrawlerModule>()
+              << std::make_shared<ExposureModule>();
 }
 
 ReconEngine::~ReconEngine()
@@ -101,6 +104,7 @@ bool ReconEngine::isModuleEnabled(const QString &id, const EngineOptions &opt)
     if (id == QLatin1String("finger"))    return opt.doFinger;
     if (id == QLatin1String("dir"))       return opt.doDir;
     if (id == QLatin1String("crawl"))     return opt.doCrawl;
+    if (id == QLatin1String("exposure"))  return opt.doExposure;
     return false;
 }
 
@@ -130,6 +134,13 @@ void ReconEngine::stop()
 void ReconEngine::runPipeline(EngineOptions opt)
 {
     ReconState state;
+    // 清空上一轮累积结果，避免多次运行互相污染
+    m_ports.clear();
+    m_fingerprints.clear();
+    m_dirs.clear();
+    m_endpoints.clear();
+    m_cdn.clear();
+
     // 预置根目标，保证即使关闭子域名枚举，后续模块仍以根目标为起点
     const QString rootIp = opt.isIp ? opt.host : NetUtil::resolveFirst(opt.host);
     state.addHost(opt.host, rootIp, QStringLiteral("主域名"));
@@ -156,19 +167,30 @@ void ReconEngine::runPipeline(EngineOptions opt)
     ctx.addIcp      = [this](const IcpInfo &v) { emit icpFound(v); };
     ctx.addIpLocation = [this](const IpLocation &v) { emit ipLocationFound(v); };
     ctx.addPorts    = [this](const PortResultList &v) {
+        m_ports += v;
         if (!v.isEmpty()) emit portsFound(v);
     };
     ctx.addFingerprints = [this](const WebFingerprintList &v) {
+        m_fingerprints += v;
         if (!v.isEmpty()) emit fingerprintsFound(v);
     };
     ctx.addDirs = [this](const DirRecordList &v) {
+        m_dirs += v;
         if (!v.isEmpty()) emit dirsFound(v);
     };
     ctx.addUrls = [this](const UrlRecordList &v) {
         if (!v.isEmpty()) emit urlsFound(v);
     };
     ctx.addCdn = [this](const CdnRecordList &v) {
+        m_cdn += v;
         if (!v.isEmpty()) emit cdnFound(v);
+    };
+    ctx.addEndpoints = [this](const ApiEndpointList &v) {
+        m_endpoints += v;
+        if (!v.isEmpty()) emit endpointsFound(v);
+    };
+    ctx.addSummary = [this](const AssetSummaryList &v) {
+        if (!v.isEmpty()) emit summaryFound(v);
     };
 
     emit logMessage(QStringLiteral("info"),
@@ -217,6 +239,9 @@ void ReconEngine::runPipeline(EngineOptions opt)
     // 汇总「IP -> 虚拟主机 / 端口」资产聚合记录（依赖前述模块填充的共享状态）
     if (opt.doCdn)
         ctx.addCdn(CdnModule::buildAggregation(state));
+
+    // 合并全部发现，生成按评分降序的「优先级总览」
+    ctx.addSummary(AssetRank::build(state, m_ports, m_fingerprints, m_dirs, m_endpoints, m_cdn));
 
     emit progressChanged(1, 1);
 

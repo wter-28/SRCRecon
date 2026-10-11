@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.19)
 
-project(SRCRecon VERSION 1.1.0 LANGUAGES CXX)
+project(SRCRecon VERSION 1.2.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -29,8 +29,16 @@ set(SRC_RECON_SOURCES
     src/core/ReconState.h
     src/core/CdnDetect.h
     src/core/CdnDetect.cpp
+    src/core/VulnDb.h
+    src/core/VulnDb.cpp
+    src/core/CdnIpRange.h
+    src/core/CdnIpRange.cpp
     src/core/JsExtract.h
     src/core/JsExtract.cpp
+    src/core/ExposureDetect.h
+    src/core/ExposureDetect.cpp
+    src/core/AssetRank.h
+    src/core/AssetRank.cpp
     src/core/ReconEngine.h
     src/core/ReconEngine.cpp
 
@@ -49,6 +57,8 @@ set(SRC_RECON_SOURCES
     src/modules/DirScanModule.cpp
     src/modules/CrawlerModule.h
     src/modules/CrawlerModule.cpp
+    src/modules/ExposureModule.h
+    src/modules/ExposureModule.cpp
 
     src/ui/MainWindow.h
     src/ui/MainWindow.cpp

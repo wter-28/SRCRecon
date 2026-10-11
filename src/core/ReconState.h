@@ -204,6 +204,24 @@ public:
         return m_origin;
     }
 
+    // ---------------- 接口候选 ----------------
+
+    /// 登记一个来自爬虫 / JS 的接口候选地址（供暴露面模块串联探测）
+    void addEndpointCandidate(const QString &url)
+    {
+        if (url.isEmpty())
+            return;
+        QMutexLocker locker(&m_mtx);
+        if (!m_endpointCandidates.contains(url))
+            m_endpointCandidates << url;
+    }
+
+    QStringList endpointCandidates() const
+    {
+        QMutexLocker locker(&m_mtx);
+        return m_endpointCandidates;
+    }
+
 private:
     mutable QMutex m_mtx;
 
@@ -214,6 +232,7 @@ private:
     QStringList                  m_aliveWeb;   // 已存活 Web 地址
     QVector<CdnRecord>           m_cdn;        // CDN 判定记录
     QMap<QString, QString>       m_origin;     // 源站候选 IP -> 证据
+    QStringList                  m_endpointCandidates;  // 接口候选地址
 };
 
 } // namespace src

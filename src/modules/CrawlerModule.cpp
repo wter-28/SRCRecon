@@ -232,6 +232,9 @@ void CrawlerModule::run(ModuleContext &ctx)
                     r.url    = ep;
                     r.source = QStringLiteral("JS接口");
                     extra << r;
+                    // 同步登记为接口候选，供后续暴露面模块串联探测
+                    if (ctx.state)
+                        ctx.state->addEndpointCandidate(ep);
                 }
                 for (const QString &sec : jsx::extractSecrets(res.body)) {
                     UrlRecord r;

@@ -47,6 +47,8 @@ signals:
     void dirsFound(const src::DirRecordList &items);
     void urlsFound(const src::UrlRecordList &items);
     void cdnFound(const src::CdnRecordList &items);
+    void endpointsFound(const src::ApiEndpointList &items);
+    void summaryFound(const src::AssetSummaryList &items);
 
     void finished(bool ok, const QString &summary);
 
@@ -59,6 +61,13 @@ private:
     std::atomic<bool> m_cancel{false};
     std::unique_ptr<QThreadPool> m_pool;
     QVector<std::shared_ptr<IReconModule>> m_modules;
+
+    // 累积各模块发现，供流水线末尾的统一排序 / 去重使用
+    PortResultList     m_ports;
+    WebFingerprintList m_fingerprints;
+    DirRecordList      m_dirs;
+    ApiEndpointList    m_endpoints;
+    CdnRecordList      m_cdn;
 };
 
 } // namespace src

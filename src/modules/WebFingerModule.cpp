@@ -3,9 +3,11 @@
 #include <QRegularExpression>
 #include <QStringList>
 
+#include "core/AssetRank.h"
 #include "core/CdnDetect.h"
 #include "core/DemoData.h"
 #include "core/NetUtil.h"
+#include "core/VulnDb.h"
 
 namespace src {
 
@@ -89,6 +91,43 @@ QString detectTechnologies(const HttpResponse &res)
     if (body.contains(QStringLiteral("webpack")))         add(QStringLiteral("Webpack"));
 
     return tech.join(QStringLiteral(", "));
+}
+
+/// 从 Server / X-Powered-By / <meta name="generator"> 中提取首个版本号字符串
+QString extractVersion(const HttpResponse &res)
+{
+    static const QRegularExpression verRe(QStringLiteral("(\\d+(?:\\.\\d+){1,3})"));
+    static const QRegularExpression metaRe(
+        QStringLiteral("<meta[^>]*name=[\"']generator[\"'][^>]*>"),
+        QRegularExpression::CaseInsensitiveOption);
+    static const QRegularExpression contentRe(
+        QStringLiteral("content=[\"']([^\"']+)[\"']"),
+        QRegularExpression::CaseInsensitiveOption);
+
+    // 依次尝试 Server 与 X-Powered-By 响应头
+    const QStringList fields = {res.header(QStringLiteral("server")),
+                                res.header(QStringLiteral("x-powered-by"))};
+    for (const QString &f : fields)
+    {
+        const QRegularExpressionMatch m = verRe.match(f);
+        if (m.hasMatch())
+            return m.captured(1);
+    }
+
+    // 回退：解析 <meta name="generator" content="..."> 标签
+    const QString html = QString::fromUtf8(res.body.left(200 * 1024));
+    const QRegularExpressionMatch gm = metaRe.match(html);
+    if (gm.hasMatch())
+    {
+        const QRegularExpressionMatch cm = contentRe.match(gm.captured(0));
+        if (cm.hasMatch())
+        {
+            const QRegularExpressionMatch vm = verRe.match(cm.captured(1));
+            if (vm.hasMatch())
+                return vm.captured(1);
+        }
+    }
+    return QString();
 }
 
 /// 汇总关键响应头
@@ -199,9 +238,11 @@ void WebFingerModule::run(ModuleContext &ctx)
         fp.technologies = detectTechnologies(res);
         fp.extraHeaders = collectHeaders(res);
         fp.waf          = cdn::detectWaf(res);
-        fp.vulnHint     = cdn::cveHints(
+        fp.vulnHint     = vulndb::vulnHints(
             fp.technologies + QLatin1Char(' ') + fp.server + QLatin1Char(' ') + fp.poweredBy,
+            extractVersion(res),
             res.body);
+        fp.severity     = AssetRank::severityOf(fp);
         out << fp;
 
         // 登记存活 Web 服务，供目录探测与爬虫串联消费

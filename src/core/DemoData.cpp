@@ -2,6 +2,8 @@
 
 #include <QDateTime>
 
+#include "core/AssetRank.h"
+
 namespace src {
 namespace demo {
 
@@ -120,6 +122,7 @@ WebFingerprintList fingerprints(const QString &baseUrl)
     a.poweredBy = QStringLiteral("PHP/7.4.3");
     a.technologies = QStringLiteral("Nginx, PHP, jQuery, Bootstrap, WordPress");
     a.extraHeaders = QStringLiteral("x-powered-by: PHP/7.4.3; set-cookie: PHPSESSID, wordpress_test_cookie");
+    a.severity = AssetRank::severityOf(a);
     out << a;
 
     WebFingerprint b;
@@ -130,6 +133,7 @@ WebFingerprintList fingerprints(const QString &baseUrl)
     b.poweredBy = QStringLiteral("Spring Boot");
     b.technologies = QStringLiteral("OpenResty, Java, Spring Boot, Swagger");
     b.extraHeaders = QStringLiteral("server: openresty; x-application-context: application");
+    b.severity = AssetRank::severityOf(b);
     out << b;
 
     WebFingerprint c;
@@ -140,6 +144,7 @@ WebFingerprintList fingerprints(const QString &baseUrl)
     c.poweredBy = QString();
     c.technologies = QStringLiteral("Spring Boot Actuator");
     c.extraHeaders = QStringLiteral("content-type: application/vnd.spring-boot.actuator.v3+json");
+    c.severity = AssetRank::severityOf(c);
     out << c;
 
     return out;
@@ -168,6 +173,7 @@ DirRecordList dirs(const QString &baseUrl)
         r.length = d.len;
         r.contentType = QString::fromLatin1(d.type);
         r.note = QString::fromLatin1(d.note);
+        r.severity = AssetRank::severityOf(r);
         out << r;
     }
     return out;

@@ -33,6 +33,8 @@ struct ModuleContext {
     std::function<void(const DirRecordList &)>      addDirs;
     std::function<void(const UrlRecordList &)>      addUrls;
     std::function<void(const CdnRecordList &)>      addCdn;
+    std::function<void(const ApiEndpointList &)>    addEndpoints;
+    std::function<void(const AssetSummaryList &)>   addSummary;
 
     bool isCancelled() const { return cancelFlag && cancelFlag->load(); }
 

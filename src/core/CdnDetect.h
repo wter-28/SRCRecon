@@ -30,9 +30,6 @@ Verdict detectByHeaders(const HttpResponse &res);
 /// 识别 WAF / 云 WAF（返回厂商，未识别返回空字符串）
 QString detectWaf(const HttpResponse &res);
 
-/// 依据技术栈 / 版本号 / 页面内容给出已知漏洞线索（best-effort，仅供排查方向）
-QString cveHints(const QString &techJoined, const QByteArray &body);
-
 /// 组合出 CDN 判定依据文本，便于展示
 QString joinReason(const QStringList &parts);
 

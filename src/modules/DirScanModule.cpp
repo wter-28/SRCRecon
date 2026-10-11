@@ -4,6 +4,7 @@
 #include <QMutex>
 #include <QMutexLocker>
 #include <QRandomGenerator>
+#include <QSet>
 #include <QThreadPool>
 #include <QUrl>
 #include <QtConcurrent/QtConcurrentRun>
@@ -11,6 +12,7 @@
 #include <algorithm>
 #include <atomic>
 
+#include "core/AssetRank.h"
 #include "core/DemoData.h"
 #include "core/NetUtil.h"
 #include "core/Wordlists.h"
@@ -107,6 +109,7 @@ void DirScanModule::run(ModuleContext &ctx)
 
     std::atomic<int> done{0};
     QMutex mtx;
+    QSet<QString> seen;  // 跨目标按 url 去重，避免同一路径在多目标下重复命中
     DirRecordList hits;
 
     const int total = targets.size() * dict.size();
@@ -146,9 +149,13 @@ void DirScanModule::run(ModuleContext &ctx)
                     r.note         = riskNote(path, res.statusCode);
                     if (wildcard && res.statusCode == 200)
                         r.note += QStringLiteral("（疑似通配）");
+                    r.severity     = AssetRank::severityOf(r);
 
                     QMutexLocker locker(&mtx);
-                    hits.append(r);
+                    if (!seen.contains(r.url)) {
+                        seen.insert(r.url);
+                        hits.append(r);
+                    }
                 }
 
                 const int d = ++done;

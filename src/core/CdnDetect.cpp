@@ -7,7 +7,6 @@
 #include <QJsonValue>
 #include <QMap>
 #include <QPair>
-#include <QRegularExpression>
 #include <QVector>
 
 namespace src {
@@ -157,31 +156,6 @@ const QVector<QPair<QString, QString>> &wafCookieTable()
     return t;
 }
 
-// ---------------- 版本 / 漏洞线索 ----------------
-struct VulnMarker
-{
-    QString marker;  // 在技术栈字符串中匹配的关键字（小写）
-    QString hint;    // 线索文本
-};
-
-const QVector<VulnMarker> &vulnTable()
-{
-    static const QVector<VulnMarker> t = {
-        {QStringLiteral("weblogic"),
-         QStringLiteral("WebLogic：关注 CVE-2020-14882/14883 未授权 RCE、CVE-2019-2725 反序列化")},
-        {QStringLiteral("struts")  , QStringLiteral("Struts2：关注 S2-045/S2-057 远程代码执行")},
-        {QStringLiteral("spring")  , QStringLiteral("Spring：若 actuator 未授权，关注 CVE-2022-22965 与内存/环境泄露")},
-        {QStringLiteral("thinkphp"), QStringLiteral("ThinkPHP：关注 5.x 远程代码执行与多语言本地包含")},
-        {QStringLiteral("shiro")   , QStringLiteral("Apache Shiro：关注 rememberMe 反序列化（CVE-2016-4437 及其绕过）")},
-        {QStringLiteral("dedecms") , QStringLiteral("DedeCMS：关注后台弱口令、任意文件上传/包含及历史变量覆盖漏洞")},
-        {QStringLiteral("discuz")  , QStringLiteral("Discuz：关注后台 Getshell、UC_KEY 泄露与 SSRF")},
-        {QStringLiteral("jenkins") , QStringLiteral("Jenkins：关注未授权脚本控制台与 CVE-2024-23897 任意文件读取")},
-        {QStringLiteral("tomcat")  , QStringLiteral("Tomcat：关注 CVE-2017-12615 PUT 上传、AJP Ghostcat（CVE-2020-1938）")},
-        {QStringLiteral("php")     , QStringLiteral("PHP：确认版本并核对已知漏洞，注意 phpinfo/备份文件泄露")}
-    };
-    return t;
-}
-
 } // namespace
 
 QString joinReason(const QStringList &parts)
@@ -308,35 +282,6 @@ QString detectWaf(const HttpResponse &res)
         }
     }
     return QString();
-}
-
-QString cveHints(const QString &techJoined, const QByteArray &body)
-{
-    const QString tech = techJoined.toLower();
-    QStringList hints;
-
-    for (const VulnMarker &m : vulnTable())
-    {
-        if (tech.contains(m.marker) && !hints.contains(m.hint))
-            hints << m.hint;
-    }
-
-    // jQuery 版本 -> 已知 XSS 线索
-    static const QRegularExpression jqRe(
-        QStringLiteral("jquery[.-]?(\\d+\\.\\d+\\.\\d+)"),
-        QRegularExpression::CaseInsensitiveOption);
-    const QRegularExpressionMatch jm = jqRe.match(tech);
-    if (jm.hasMatch())
-    {
-        const QString ver = jm.captured(1);
-        const int major = ver.section(QLatin1Char('.'), 0, 0).toInt();
-        const int minor = ver.section(QLatin1Char('.'), 1, 1).toInt();
-        if (major < 3 || (major == 3 && minor < 5))
-            hints << QStringLiteral("jQuery %1 较旧，关注 CVE-2020-11022/11023 XSS（升级至 3.5.0+）").arg(ver);
-    }
-
-    Q_UNUSED(body);
-    return hints.join(QStringLiteral("\n"));
 }
 
 } // namespace cdn
